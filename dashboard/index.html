@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Battery Lab Analytics — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{
+    --paper:#FAFBF8; --panel:#FFFFFF; --ink:#16233A; --muted:#5C6B84;
+    --grid:#E4E8E1; --line:#D3D9D1; --volt:#E8A020; --readout:#0E1B12;
+    --liion:#2F6FB7; --nimh:#3D8B5F; --pb:#C05146; --lipo:#7A5FA8; --nizn:#D97E2B;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{background:var(--paper);color:var(--ink);
+       font-family:"IBM Plex Sans",system-ui,sans-serif;line-height:1.5}
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 22px 56px}
+
+  header{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 18px;
+         border-bottom:2px solid var(--ink);padding-bottom:14px;margin-bottom:22px}
+  h1{font-family:"IBM Plex Mono",monospace;font-size:1.45rem;font-weight:600;letter-spacing:.02em}
+  .prov{color:var(--muted);font-size:.86rem}
+  .prov b{color:var(--ink);font-weight:600}
+
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-bottom:26px}
+  .kpi{background:var(--readout);border-radius:10px;padding:14px 16px 12px;
+       border:1px solid #223227;box-shadow:inset 0 0 24px rgba(0,0,0,.45)}
+  .kpi .label{color:#9DB6A3;font-size:.7rem;text-transform:uppercase;letter-spacing:.14em}
+  .kpi .value{font-family:"IBM Plex Mono",monospace;font-size:1.9rem;font-weight:500;
+              color:#F5C64F;text-shadow:0 0 12px rgba(232,160,32,.35);margin:2px 0}
+  .kpi .value small{font-size:.95rem;color:#C9A24A;margin-left:4px}
+  .kpi .note{color:#7E9585;font-size:.74rem}
+  .kpi .note em{color:#B7E0C0;font-style:normal}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px 12px}
+  .card h2{font-size:.95rem;font-weight:600;margin-bottom:2px}
+  .card .sub{color:var(--muted);font-size:.78rem;margin-bottom:10px}
+  .card.wide{grid-column:1 / -1}
+  .chart-box{position:relative;height:300px}
+  .card.wide .chart-box{height:340px}
+
+  .tabs{display:inline-flex;gap:6px;margin-bottom:8px}
+  .tabs button{font-family:"IBM Plex Mono",monospace;font-size:.76rem;padding:4px 12px;
+               border:1px solid var(--line);border-radius:16px;background:var(--paper);
+               color:var(--muted);cursor:pointer}
+  .tabs button:focus-visible{outline:2px solid var(--volt);outline-offset:2px}
+  .tabs button.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+  .method{margin-top:26px;border-top:1px solid var(--line);padding-top:14px;
+          color:var(--muted);font-size:.82rem}
+  .method code{font-family:"IBM Plex Mono",monospace;background:#EFF2EC;
+               padding:1px 5px;border-radius:4px;color:var(--ink)}
+  @media (max-width:820px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>BATTERY LAB ANALYTICS</h1>
+    <span class="prov">Electrochemical storage lab RE04 · WHZ Zwickau · raw Excel → SQLite →
+      <b>metrics computed in SQL</b> → this dashboard</span>
+    <nav aria-label="Dashboard pages" style="margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:.78rem">
+      <a href="index.html" style="color:#fff;background:var(--ink);text-decoration:none;padding:4px 12px;border:1px solid var(--ink);border-radius:16px;margin-left:6px">Batteries (RE04)</a>
+      <a href="hydrogen.html" style="color:var(--muted);text-decoration:none;padding:4px 12px;border:1px solid var(--line);border-radius:16px;margin-left:6px">Hydrogen (RE05)</a>
+      <a href="production.html" style="color:var(--muted);text-decoration:none;padding:4px 12px;border:1px solid var(--line);border-radius:16px;margin-left:6px">Production</a>
+    </nav>
+  </header>
+
+  <section class="kpis" aria-label="Key results">
+    <div class="kpi"><div class="label">Faraday constant · measured</div>
+      <div class="value">93 253<small>C/mol</small></div>
+      <div class="note">from anode Δm · <em>−3.4%</em> vs. literature 96 485</div></div>
+    <div class="kpi"><div class="label">Best energy density</div>
+      <div class="value">79.6<small>mWh/g</small></div>
+      <div class="note">LiPo — <em>6.4×</em> lead-acid · recomputed after fixing a broken source formula</div></div>
+    <div class="kpi"><div class="label">Internal resistance range</div>
+      <div class="value">0.17–0.22<small>Ω</small></div>
+      <div class="note">least-squares fit <em>in pure SQL</em> · artifacts excluded</div></div>
+    <div class="kpi"><div class="label">NiMH voltage efficiency</div>
+      <div class="value">94.8<small>%</small></div>
+      <div class="note">86.4 J out / 91.2 J in · trapezoidal ∫ via <em>LAG() window fn</em></div></div>
+  </section>
+
+  <div class="grid">
+    <div class="card wide">
+      <h2>U-I characteristic &amp; internal resistance</h2>
+      <div class="sub">Terminal voltage vs. load current across 12 resistance levels. Dashed line = OLS fit
+        (U = U₀ − Rᵢ·I) computed in SQL; grey × = excluded measurement artifacts.</div>
+      <div class="tabs" role="tablist" aria-label="Battery chemistry">
+        <button class="active" data-chem="Li-Ion">Li-Ion</button>
+        <button data-chem="NiMH">NiMH</button>
+        <button data-chem="Lead-acid">Lead-acid</button>
+      </div>
+      <div class="chart-box"><canvas id="uiChart"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>Current energy density</h2>
+      <div class="sub">capacity_now × OCV / weight — validated &amp; recomputed in SQL (Q2)</div>
+      <div class="chart-box"><canvas id="densityChart"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>State of charge from open-circuit voltage</h2>
+      <div class="sub">Dotted line: 20% SOC floor required by the lab spec — NiZn sits right on it</div>
+      <div class="chart-box"><canvas id="socChart"></canvas></div>
+    </div>
+
+    <div class="card wide">
+      <h2>NiMH discharge / charge cycle — 230 mA constant current</h2>
+      <div class="sub">5 minutes each; energy per phase by trapezoidal integration → η = 94.8%
+        (voltage efficiency of a partial cycle; full-cycle energy efficiency is typically 65–85%)</div>
+      <div class="chart-box"><canvas id="cycleChart"></canvas></div>
+    </div>
+  </div>
+
+  <p class="method">Method: <code>src/01_etl.py</code> cleans the raw workbook (German decimal commas,
+  broken formula, spatial layout) into 4 relational tables · <code>sql/analysis_queries.sql</code> computes
+  every number on this page with CTEs and window functions · figures reproducible via
+  <code>src/03_visualize.py</code> and <code>notebooks/analysis.ipynb</code>.</p>
+</div>
+
+<script>
+const C = {"Li-Ion":"#2F6FB7","NiMH":"#3D8B5F","Lead-acid":"#C05146","LiPo":"#7A5FA8","NiZn":"#D97E2B"};
+
+// ---- data (from outputs/battery_lab.db) ------------------------------------
+const UI = {
+ "Li-Ion":{pts:[[70,3.95],[85,3.94],[108,3.94],[147.9,3.93],[180.8,3.92],[360,3.89],[440,3.87],[560,3.84],[760,3.79],[910,3.75],[1210,3.70]],
+           excl:[[2100,3.84]], u0:3.963, ri:0.22},
+ "NiMH":{pts:[[23.1,1.31],[28,1.30],[35.7,1.30],[49.1,1.30],[60.4,1.30],[74.7,1.29],[84.2,1.29],[96.6,1.29],[113.2,1.29],[123.7,1.29],[135,1.28],[160.5,1.28]],
+         excl:[], u0:1.308, ri:0.18},
+ "Lead-acid":{pts:[[36.5,2.06],[44.3,2.05],[56.4,2.05],[77.5,2.05],[95.2,2.05],[117.6,2.04],[132.4,2.04],[151.5,2.04],[177,2.03],[193,2.03]],
+              excl:[[200,2.05],[200,2.05]], u0:2.062, ri:0.17}
+};
+const KPI = {batteries:["LiPo","NiMH","NiZn","Lead-acid"],
+             density:[79.6,53.6,15.5,12.4], soc:[80.0,88.6,22.0,48.0]};
+const CYCLE = {t:[0,30,60,90,120,150,180,210,240,270,300],
+  discharge:[1.27,1.26,1.26,1.26,1.26,1.25,1.25,1.25,1.24,1.24,1.24],
+  charge:[1.27,1.31,1.31,1.32,1.32,1.32,1.33,1.33,1.33,1.34,1.34]};
+
+Chart.defaults.font.family = '"IBM Plex Sans", system-ui, sans-serif';
+Chart.defaults.color = '#5C6B84';
+Chart.defaults.borderColor = '#E4E8E1';
+
+// ---- U-I chart with chemistry tabs ------------------------------------------
+const uiCtx = document.getElementById('uiChart');
+function uiDatasets(chem){
+  const d = UI[chem], col = C[chem];
+  const maxI = Math.max(...d.pts.concat(d.excl).map(p => p[0]));
+  const fit = [{x:0, y:d.u0}, {x:maxI*1.03, y:d.u0 - d.ri/1000*maxI*1.03}];
+  const sets = [
+    {type:'scatter', label:'measured', data:d.pts.map(([x,y])=>({x,y})),
+     backgroundColor:col, pointRadius:5},
+    {type:'line', label:`fit: Ri = ${d.ri.toFixed(2)} Ω · U₀ = ${d.u0.toFixed(2)} V`,
+     data:fit, borderColor:col, borderDash:[7,5], borderWidth:2, pointRadius:0}
+  ];
+  if (d.excl.length) sets.splice(1,0,{type:'scatter', label:'excluded (artifact)',
+     data:d.excl.map(([x,y])=>({x,y})), backgroundColor:'#9AA4B0',
+     pointStyle:'crossRot', pointRadius:7, borderColor:'#9AA4B0', borderWidth:2});
+  return sets;
+}
+const uiChart = new Chart(uiCtx, {
+  data:{datasets:uiDatasets('Li-Ion')},
+  options:{maintainAspectRatio:false, interaction:{mode:'nearest', intersect:false},
+    scales:{x:{type:'linear', title:{display:true, text:'Load current I [mA]'}},
+            y:{title:{display:true, text:'Terminal voltage U [V]'}}},
+    plugins:{tooltip:{callbacks:{label:c=>` ${c.parsed.y.toFixed(2)} V @ ${c.parsed.x.toFixed(1)} mA`}}}}
+});
+document.querySelectorAll('.tabs button').forEach(btn=>btn.addEventListener('click',()=>{
+  document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  uiChart.data.datasets = uiDatasets(btn.dataset.chem);
+  uiChart.update();
+}));
+
+// ---- energy density ----------------------------------------------------------
+new Chart(document.getElementById('densityChart'), {
+  type:'bar',
+  data:{labels:KPI.batteries, datasets:[{data:KPI.density,
+        backgroundColor:KPI.batteries.map(b=>C[b])}]},
+  options:{maintainAspectRatio:false, indexAxis:'y',
+    scales:{x:{title:{display:true, text:'mWh/g'}}},
+    plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:c=>` ${c.parsed.x} mWh/g`}}}}
+});
+
+// ---- SOC with 20% floor line -------------------------------------------------
+const floorLine = {id:'floor', afterDatasetsDraw(ch){
+  const {ctx, chartArea:{left,right}, scales:{y}} = ch;
+  const yPix = y.getPixelForValue(20);
+  ctx.save(); ctx.strokeStyle='#C05146'; ctx.setLineDash([4,4]); ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(left,yPix); ctx.lineTo(right,yPix); ctx.stroke();
+  ctx.fillStyle='#C05146'; ctx.font='11px "IBM Plex Mono", monospace';
+  ctx.fillText('20% floor', left+6, yPix-6); ctx.restore();}};
+new Chart(document.getElementById('socChart'), {
+  type:'bar',
+  data:{labels:KPI.batteries, datasets:[{data:KPI.soc,
+        backgroundColor:KPI.batteries.map(b=>C[b])}]},
+  options:{maintainAspectRatio:false,
+    scales:{y:{max:100, title:{display:true, text:'SOC [%]'}}},
+    plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:c=>` ${c.parsed.y}% SOC`}}}},
+  plugins:[floorLine]
+});
+
+// ---- cycle test ----------------------------------------------------------------
+new Chart(document.getElementById('cycleChart'), {
+  type:'line',
+  data:{labels:CYCLE.t, datasets:[
+    {label:'discharge (86.4 J delivered)', data:CYCLE.discharge, borderColor:C['Lead-acid'],
+     backgroundColor:C['Lead-acid'], pointRadius:4, tension:.15},
+    {label:'charge (91.2 J supplied)', data:CYCLE.charge, borderColor:C['NiMH'],
+     backgroundColor:C['NiMH'], pointRadius:4, pointStyle:'rect', tension:.15}]},
+  options:{maintainAspectRatio:false,
+    scales:{x:{title:{display:true, text:'Time [s]'}},
+            y:{title:{display:true, text:'Cell voltage U [V]'}}},
+    plugins:{tooltip:{callbacks:{label:c=>` ${c.dataset.label.split(' (')[0]}: ${c.parsed.y} V`}}}}
+});
+</script>
+</body>
+</html>
