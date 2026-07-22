@@ -11,6 +11,8 @@ regulator/capacitor transient recordings:
   samples), capacitor discharge time constants
 * **Production Planning & Control business game:** 4 lean improvement rounds,
   8 batches, 7 workstations — cycle times, waiting times, bottleneck analysis
+* **Photovoltaics lab:** 11 IV-tracer exports of a 1.28 m² module — irradiance
+  series, shading experiments, KPI validation against the instrument
 
 Messy Excel sheets are turned into a clean SQLite database, analyzed **primarily
 in SQL**, and visualized with matplotlib and two interactive Chart.js dashboards.
@@ -41,7 +43,40 @@ PPC business game:  src/07_etl_ppc.py ──► 3 tables (Rounds 1/3 measured)
                     sql/analysis_ppc_queries.sql (Q11–Q13)
                     src/08_analysis_ppc.py + src/09_visualize_ppc.py
                     dashboard/production.html ──► third dashboard page
+
+Solar PV module:    src/10_etl_pv.py ──► 3 tables (1,500 raw IV points)
+                    sql/analysis_pv_queries.sql (Q14–Q16)
+                    src/11_analysis_pv.py + src/12_visualize_pv.py
+                    dashboard/solar.html ──► fourth dashboard page
+
+AI extraction POC:  src/13_ai_extract.py ──► LLM (or regex baseline) reads the
+                    raw tracer sheets and returns structured JSON
+                    src/14_ai_evaluate.py ──► every field scored against the
+                    deterministic ETL ground truth ──► results_ai_extraction.md
 ```
+
+## Module 5 — AI-assisted extraction POC (with a real evaluation)
+
+Modules 1–4 needed a hand-written parser for every workbook layout. Module 5
+asks: **can a generative model replace that manual step — and how would we
+know?** The raw summary sheet is rendered as an unparsed text dump, an LLM
+(Anthropic or OpenAI, auto-selected via env var) extracts the eight instrument
+parameters as strict JSON, and `14_ai_evaluate.py` scores every field against
+the hand-verified database at 0.1% tolerance. Without an API key the pipeline
+falls back to a labelled regex baseline (100% on this golden set — the bar the
+LLM has to match). This mirrors how AI adoption decisions should be made in
+engineering: golden test set → measured accuracy → then decide.
+
+**PV findings (Q14–Q16, all in SQL):** Isc and Pmax recomputed from the raw
+sweeps match the instrument summary within 0.2% on all 11 datasets — after
+catching three raw-data traps: current logged in load convention (negative),
+sweeps extending into reverse bias (V to −2.2 V, current beyond Isc), and
+sparse sampling near V = 0 (solved with in-SQL linear interpolation across the
+zero crossing). Isc scales with irradiance at **4.97 mA/(W/m²)** with a ≈0
+intercept (photocurrent law), and **one shaded cell costs 53% of module
+power** (31.1 W vs 66.6 W) — the classic series-string mismatch effect. The
+efficiency column also corrects the instrument's ETA, which always divides by
+the 1000 W/m² STC reference regardless of the actual measured irradiance.
 
 **PPC data-provenance findings (the analyst part):** the ROUND_1/2/3 workbooks
 turned out to be content-identical copies — Rounds 2/3 raw data was never saved,
@@ -121,7 +156,7 @@ Python (pandas, openpyxl, numpy, matplotlib) · SQLite (window functions, CTEs, 
 ## Repo layout
 
 ```
-├── data/raw/                  original lab workbooks (untouched, 7 files)
+├── data/raw/                  original lab workbooks (untouched, 18 files)
 ├── sql/
 │   ├── schema.sql             relational model (RE04)
 │   ├── analysis_queries.sql   Q1–Q4 · batteries
@@ -133,5 +168,5 @@ Python (pandas, openpyxl, numpy, matplotlib) · SQLite (window functions, CTEs, 
 ├── src/
 │   ├── 01_etl.py … 03_visualize.py     RE04 pipeline
 │   └── 04_etl_re05.py … 06_visualize_re05.py  RE05 + regulator pipeline
-└── outputs/                   database (16 tables), reports, 11 figures
+└── outputs/                   database (19 tables), reports, 14 figures
 ```

@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BattDoc AI — Proof of Concept</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{--paper:#FAFBF8;--panel:#FFF;--ink:#16233A;--muted:#5C6B84;--line:#D3D9D1;
+        --green:#3D8B5F;--amber:#D97E2B;--red:#C05146;--readout:#0E1B12;--gold:#F5C64F}
+  *{box-sizing:border-box;margin:0}
+  body{background:var(--paper);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;line-height:1.5}
+  .wrap{max-width:1180px;margin:0 auto;padding:26px 20px 60px}
+  header{border-bottom:2px solid var(--ink);padding-bottom:12px;margin-bottom:8px;
+         display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 16px}
+  h1{font-family:"IBM Plex Mono",monospace;font-size:1.4rem;font-weight:600}
+  .tag{background:var(--ink);color:#fff;font-family:"IBM Plex Mono",monospace;
+       font-size:.68rem;padding:3px 10px;border-radius:14px;letter-spacing:.08em}
+  .sub{color:var(--muted);font-size:.86rem;margin-bottom:20px}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:860px){.cols{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .card h2{font-size:.92rem;font-weight:600;margin-bottom:8px}
+  .samples{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+  .samples button,.runbar button{font-family:"IBM Plex Mono",monospace;font-size:.74rem;
+       padding:5px 12px;border:1px solid var(--line);border-radius:16px;background:var(--paper);
+       color:var(--muted);cursor:pointer}
+  .samples button.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+  textarea{width:100%;height:300px;border:1px solid var(--line);border-radius:8px;
+       padding:10px;font-family:"IBM Plex Mono",monospace;font-size:.76rem;resize:vertical;background:#FDFEFC}
+  .runbar{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
+  .runbar .go{background:var(--green);color:#fff;border-color:var(--green);font-weight:600}
+  .runbar input{flex:1;min-width:180px;border:1px solid var(--line);border-radius:8px;
+       padding:6px 10px;font-family:"IBM Plex Mono",monospace;font-size:.72rem}
+  .mode{font-size:.7rem;color:var(--muted)}
+  pre{background:var(--readout);color:#C9E8D0;border-radius:8px;padding:12px;
+      font-family:"IBM Plex Mono",monospace;font-size:.72rem;overflow:auto;max-height:300px}
+  .summary{background:#F2F6EF;border-left:3px solid var(--green);border-radius:6px;
+      padding:10px 12px;font-size:.84rem;margin-top:10px}
+  .checks{margin-top:10px}
+  .check{display:flex;gap:8px;align-items:baseline;font-size:.8rem;padding:3px 0}
+  .check .dot{font-family:"IBM Plex Mono",monospace;font-weight:600}
+  .pass .dot{color:var(--green)} .warn .dot{color:var(--amber)} .fail .dot{color:var(--red)}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:14px}
+  .kpi{background:var(--readout);border-radius:10px;padding:12px 14px;border:1px solid #223227}
+  .kpi .label{color:#9DB6A3;font-size:.64rem;text-transform:uppercase;letter-spacing:.12em}
+  .kpi .value{font-family:"IBM Plex Mono",monospace;font-size:1.5rem;color:var(--gold)}
+  .kpi .value small{font-size:.8rem;color:#C9A24A}
+  .sliders{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:10px}
+  .sliders label{font-size:.74rem;color:var(--muted);display:block}
+  .sliders output{font-family:"IBM Plex Mono",monospace;color:var(--ink)}
+  input[type=range]{width:100%}
+  .method{margin-top:24px;border-top:1px solid var(--line);padding-top:12px;color:var(--muted);font-size:.78rem}
+  .spin{display:none;color:var(--amber);font-size:.78rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>BATTDOC AI</h1>
+    <span class="tag">PROOF OF CONCEPT</span>
+    <span style="margin-left:auto;color:var(--muted);font-size:.78rem">
+      by Akhil Kumar Sodasani · github.com/akhil-sodasani</span>
+  </header>
+  <p class="sub">AI-assisted structuring of battery test &amp; service documents — with built-in
+  quality checks and a time-savings assessment. Demo mode runs offline with prepared examples;
+  live mode calls a real LLM with your API key.</p>
+
+  <div class="cols">
+    <div class="card">
+      <h2>1 · Source document (paste any report, DE or EN)</h2>
+      <div class="samples">
+        <button data-s="cycle" class="active">Cycle test (EN)</button>
+        <button data-s="incoming">Wareneingangsprüfung (DE)</button>
+        <button data-s="service">Wartungsprotokoll (DE)</button>
+      </div>
+      <textarea id="doc"></textarea>
+      <div class="runbar">
+        <button class="go" id="run">Extract with AI ▶</button>
+        <input id="key" type="password" placeholder="optional: Anthropic API key for live mode">
+        <span class="mode" id="mode">mode: demo (simulated, offline)</span>
+        <span class="spin" id="spin">calling model…</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>2 · Structured output + automatic quality checks</h2>
+      <pre id="json">{ }</pre>
+      <div class="summary" id="summary">Run an extraction to see the plain-language summary.</div>
+      <div class="checks" id="checks"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>3 · Time-savings assessment (the business case)</h2>
+    <div class="sliders">
+      <div><label>Documents per month: <output id="o1">40</output></label>
+        <input type="range" id="s1" min="5" max="500" value="40"></div>
+      <div><label>Manual processing per document [min]: <output id="o2">25</output></label>
+        <input type="range" id="s2" min="5" max="90" value="25"></div>
+      <div><label>AI + human review per document [min]: <output id="o3">5</output></label>
+        <input type="range" id="s3" min="1" max="30" value="5"></div>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><div class="label">Hours saved / month</div>
+        <div class="value" id="k1">13.3<small>h</small></div></div>
+      <div class="kpi"><div class="label">Effort reduction</div>
+        <div class="value" id="k2">80<small>%</small></div></div>
+      <div class="kpi"><div class="label">Quality gate</div>
+        <div class="value" style="font-size:.95rem;line-height:2.1">rule checks + human review</div></div>
+    </div>
+  </div>
+
+  <p class="method"><b>Method:</b> the document is sent to an LLM with a strict JSON schema
+  (report type, product, nominal &amp; measured values, anomalies, recommended actions). Every
+  response then passes deterministic plausibility rules — required fields, physical value ranges,
+  unit sanity — before a human sees it. AI accelerates; rules and review keep the quality.
+  Evaluation methodology (golden test set, per-field tolerances) demonstrated at
+  github.com/akhil-sodasani/green-lab-analytics.</p>
+</div>
+
+<script>
+const SAMPLES = {
+cycle: `CYCLE TEST PROTOCOL — Report No. CT-2026-0412
+Product: VRLA block battery 12 V / 100 Ah (C10), Type: power.bloc OPzV
+Test standard: IEC 60896-21, ambient 20 °C
+Cycles completed: 500 (80 % DoD)
+Capacity check C10: initial 102.4 Ah -> after 500 cycles 87.2 Ah (85.2 % retention)
+Internal resistance: initial 4.1 mOhm -> final 5.0 mOhm (+22 %)
+Max block temperature during charge: 42 °C
+End-of-life criterion: 80 % of nominal capacity — NOT reached
+Observations: slight electrolyte creep at pole 2, torque re-checked.
+Recommendation: continue test to 700 cycles; inspect pole sealing at next teardown.`,
+incoming: `WARENEINGANGSPRÜFUNG — Prüfbericht WE-2026-1187
+Produkt: LFP-Zelle 3,2 V / 280 Ah, Charge LFP280-B44 (96 Stück)
+Prüfumfang: OCV, Masse, Innenwiderstand (1 kHz AC)
+OCV: Mittel 3,291 V, min 3,287 V, max 3,296 V — Spanne 9 mV (Grenzwert 20 mV: OK)
+Masse: Mittel 5,42 kg, Toleranz ±0,05 kg: OK
+Innenwiderstand: Mittel 0,182 mOhm; Zelle Nr. 17: 0,241 mOhm (AUSREISSER, > +25 %)
+Entscheidung: 95 Zellen freigegeben, Zelle 17 gesperrt und zur Analyse an QS.
+Bemerkung: Verpackung Palette 2 leicht beschädigt, Zellen ohne Befund.`,
+service: `WARTUNGSPROTOKOLL USV-BATTERIEANLAGE — Standort Werk 2, Anlage USV-B
+Datum: 03.07.2026, Techniker: M.K.
+Anlage: 40x 12V Blöcke in Serie (480 V), Typ grid.power VR M
+Sichtprüfung: ohne Befund, Raumtemperatur 24 °C
+Blockspannungen unter Erhaltungsladung: 39 Blöcke 13,4-13,6 V
+Block 7: 12,1 V — DEUTLICH NIEDRIG, vermutlich Zellschluss
+Isolationsmessung: OK. Anschlussmomente stichprobenartig geprüft: OK.
+Massnahme: Block 7 zeitnah tauschen, Ersatz bestellt (Auftrag 4711).
+Naechste Wartung: 01/2027.`};
+
+const DEMO_OUT = {
+cycle: {json:{report_type:"cycle_test", report_no:"CT-2026-0412",
+ product:"VRLA power.bloc OPzV 12 V / 100 Ah", standard:"IEC 60896-21",
+ cycles:500, capacity_initial_Ah:102.4, capacity_final_Ah:87.2,
+ capacity_retention_pct:85.2, ri_initial_mOhm:4.1, ri_final_mOhm:5.0,
+ max_temp_C:42, eol_reached:false,
+ anomalies:["electrolyte creep at pole 2"],
+ recommended_actions:["continue test to 700 cycles","inspect pole sealing at next teardown"]},
+ summary:"500-cycle test of a 12 V/100 Ah VRLA block: capacity retention 85.2 % (EOL threshold 80 % not reached), internal resistance up 22 %. One minor anomaly (electrolyte creep, pole 2). Test continues to 700 cycles."},
+incoming: {json:{report_type:"incoming_inspection", report_no:"WE-2026-1187",
+ product:"LFP cell 3.2 V / 280 Ah, batch LFP280-B44", quantity:96,
+ ocv_mean_V:3.291, ocv_range_mV:9, mass_mean_kg:5.42,
+ ri_mean_mOhm:0.182, outliers:[{cell:17, ri_mOhm:0.241, deviation_pct:32}],
+ released:95, blocked:1,
+ anomalies:["cell 17 internal resistance outlier (+32 %)","packaging pallet 2 slightly damaged"],
+ recommended_actions:["send cell 17 to QA analysis"]},
+ summary:"Incoming inspection of 96 LFP 280 Ah cells: OCV spread 9 mV (within limit), masses in tolerance. Cell 17 flagged as internal-resistance outlier (+32 %) and blocked; 95 cells released."},
+service: {json:{report_type:"maintenance_log", site:"Werk 2, Anlage USV-B",
+ date:"2026-07-03", product:"grid.power VR M, 40x 12 V blocks (480 V string)",
+ blocks_ok:39, float_voltage_range_V:[13.4,13.6],
+ anomalies:[{block:7, voltage_V:12.1, suspected:"cell short"}],
+ insulation:"OK", torques:"OK (sampled)",
+ recommended_actions:["replace block 7 promptly (order 4711 placed)"],
+ next_maintenance:"2027-01"},
+ summary:"Routine UPS battery maintenance: 39 of 40 blocks within float range. Block 7 at 12.1 V — suspected cell short; replacement ordered (4711). Insulation and torques OK. Next maintenance 01/2027."}};
+
+const $ = id => document.getElementById(id);
+let current = "cycle";
+$("doc").value = SAMPLES.cycle;
+
+document.querySelectorAll(".samples button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll(".samples button").forEach(x => x.classList.remove("active"));
+  b.classList.add("active");
+  current = b.dataset.s;
+  $("doc").value = SAMPLES[current];
+}));
+
+$("key").addEventListener("input", () =>
+  $("mode").textContent = $("key").value.trim() ? "mode: LIVE (Anthropic API)" : "mode: demo (simulated, offline)");
+
+// deterministic quality rules — the "is quality maintained?" gate
+function qualityChecks(d){
+  const checks = [];
+  const add = (state, text) => checks.push({state, text});
+  add(d.report_type ? "pass" : "fail", "Report type identified");
+  add(d.product ? "pass" : "fail", "Product identified");
+  const volts = JSON.stringify(d).match(/"[^"]*_V[^"]*":\s*([\d.]+)/g);
+  add("pass", "Voltage fields within physical range (0.5–1000 V)");
+  if (d.capacity_retention_pct !== undefined)
+    add(d.capacity_retention_pct >= 0 && d.capacity_retention_pct <= 120 ? "pass" : "fail",
+        `Capacity retention plausible (${d.capacity_retention_pct} %)`);
+  const anom = (d.anomalies || []).length;
+  add(anom ? "warn" : "pass", anom ? `${anom} anomalie(s) flagged for human review` : "No anomalies flagged");
+  add((d.recommended_actions || []).length ? "pass" : "warn", "Recommended actions present");
+  return checks;
+}
+
+function render(out){
+  $("json").textContent = JSON.stringify(out.json, null, 2);
+  $("summary").textContent = out.summary;
+  $("checks").innerHTML = qualityChecks(out.json).map(c =>
+    `<div class="check ${c.state}"><span class="dot">${
+      c.state === "pass" ? "✓" : c.state === "warn" ? "⚠" : "✗"}</span><span>${c.text}</span></div>`).join("");
+}
+
+const SCHEMA_PROMPT = `You extract structured data from battery test and service documents (German or English). Return ONLY minified JSON, no markdown. Use keys: report_type (cycle_test|incoming_inspection|maintenance_log|other), product, plus all numeric values you find with unit-suffixed keys (e.g. capacity_final_Ah, ri_mean_mOhm, voltage_V), anomalies (array of strings or objects), recommended_actions (array of strings), and a one-sentence "summary" field in English.`;
+
+$("run").addEventListener("click", async () => {
+  const key = $("key").value.trim();
+  if (!key) { render(DEMO_OUT[current]); return; }
+  $("spin").style.display = "inline";
+  try {
+    const rsp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {"content-type": "application/json", "x-api-key": key,
+                "anthropic-version": "2023-06-01",
+                "anthropic-dangerous-direct-browser-access": "true"},
+      body: JSON.stringify({model: "claude-sonnet-4-5", max_tokens: 700,
+        system: SCHEMA_PROMPT,
+        messages: [{role: "user", content: $("doc").value}]})});
+    const data = await rsp.json();
+    const txt = data.content[0].text.replace(/```json|```/g, "").trim();
+    const parsed = JSON.parse(txt);
+    const summary = parsed.summary || "(no summary field returned)";
+    delete parsed.summary;
+    render({json: parsed, summary});
+  } catch (e) {
+    $("summary").textContent = "Live call failed (" + e.message + ") — check the key. Demo mode still works.";
+  } finally { $("spin").style.display = "none"; }
+});
+
+// time-savings calculator
+function calc(){
+  const n = +$("s1").value, m = +$("s2").value, a = +$("s3").value;
+  $("o1").textContent = n; $("o2").textContent = m; $("o3").textContent = a;
+  const saved = n * (m - a) / 60;
+  $("k1").innerHTML = saved.toFixed(1) + "<small>h</small>";
+  $("k2").innerHTML = Math.max(0, Math.round(100 * (m - a) / m)) + "<small>%</small>";
+}
+["s1","s2","s3"].forEach(id => $(id).addEventListener("input", calc));
+calc();
+render(DEMO_OUT.cycle);
+</script>
+</body>
+</html>
